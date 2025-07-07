@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: spring-ai-alibaba-openai-chat-model-example
+  ai:
+    openai:
+      api-key: xxx
+      base-url: https://api.siliconflow.cn/
+      chat:
+        options:
+          model: deepseek-ai/DeepSeek-R1
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+case-model:
+  visual:
+    api-key: xxx
+    base-url: https://api.siliconflow.cn/
+    model: Qwen/Qwen2.5-VL-72B-Instruct
+  analyze:
+    api-key: xxx
+    base-url: https://api.siliconflow.cn/
+    model: deepseek-ai/DeepSeek-R1
+  generate:
+    api-key: xxx
+    base-url: https://api.siliconflow.cn/
+    model: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+  reviewer:
+    api-key: xxx
+    base-url: https://api.siliconflow.cn/
+    model: MiniMaxAI/MiniMax-M1-80k
+  format:
+    api-key: xxx
+    base-url: https://api.siliconflow.cn/
+    model: deepseek-ai/DeepSeek-V3
+logging:
+  level:
+    root: INFO
+    org.springframework.ai: DEBUG  # 启用 Spring AI 的详细日志
+    # 其他包级别的日志配置
+    com.example.demo: DEBUG
