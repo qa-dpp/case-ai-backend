@@ -298,7 +298,7 @@ public class AiChatController {
             state.registerKeyAndStrategy(Consts.ORIGIN_MESSAGE, new ReplaceStrategy());
             state.registerKeyAndStrategy(Consts.CASE_INFO_MESSAGE, new ReplaceStrategy());
             state.registerKeyAndStrategy(Consts.CASE_REVIEW_MESSAGE, new ReplaceStrategy());
-            state.registerKeyAndStrategy(Consts.CASE_FORMAT_MESSAGE, new ReplaceStrategy());
+            //state.registerKeyAndStrategy(Consts.CASE_FORMAT_MESSAGE, new ReplaceStrategy());
             return state;
         };
         StateGraph graph = new StateGraph(stateFactory)
@@ -307,8 +307,11 @@ public class AiChatController {
                 .addNode("format", node_async(new CaseFormatNode(openAiFormatChatClient)))
                 .addEdge(START, "generate")
                 .addEdge("generate", "review")
-                .addEdge("format", END)
-                .addConditionalEdges("review", edge_async(new FeedbackDispatcher()), Map.of("positive", "format", "negative", "generate"));
+                //.addEdge("format", END)
+               // .addConditionalEdges("review", edge_async(new FeedbackDispatcher()), Map.of("positive", "format", "negative", "generate"));
+                .addConditionalEdges("review", edge_async(new FeedbackDispatcher()), Map.of("positive", END, "negative", "generate"));
+
+
 
         CompiledGraph compile = graph.compile();
         String originMessage = chatDto.getContent();
