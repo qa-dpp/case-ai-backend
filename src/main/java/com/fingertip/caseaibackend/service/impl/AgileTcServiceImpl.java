@@ -1,5 +1,7 @@
 package com.fingertip.caseaibackend.service.impl;
 
+import com.fingertip.caseaibackend.entity.MarkdownNode;
+import com.fingertip.caseaibackend.entity.MindMap;
 import com.fingertip.caseaibackend.service.AgileTcService;
 import com.fingertip.caseaibackend.vo.ApiResult;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,9 +15,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,7 +25,7 @@ public class AgileTcServiceImpl implements AgileTcService {
     private RestTemplate restTemplate;
 
     @Override
-    public ApiResult<Boolean> saveToAgileTc(String kmData, String caseName, ApiResult<Boolean> result) {
+    public ApiResult<Boolean> saveToAgileTc(String kmData, String caseName, ApiResult<Boolean> result)    {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         try {
@@ -47,22 +47,7 @@ public class AgileTcServiceImpl implements AgileTcService {
                     createBody.put("productLineId", 1);
                     createBody.put("creator", "admin");
                     createBody.put("caseType", 0);
-                    // 正则表达式匹配 ```json 和 ``` 之间的内容（包含换行符）
-                    Pattern pattern = Pattern.compile(
-                            "([`']){3}\\s*json\\s*([\\s\\S]*?)\\s*\\1",  // 捕获组2：JSON内容
-                            Pattern.CASE_INSENSITIVE
-                    );
-                    Matcher matcher = pattern.matcher(kmData);
-                    String cleanedJson = kmData;  // 初始化为原始数据，保留所有字符
-
-                    if (matcher.find()) {
-                        // 提取JSON内容并去除首尾空白（保留转义字符）
-                        cleanedJson = matcher.group(2).trim();
-                    } else {
-                        // 未找到JSON代码块，记录警告日志
-                        System.out.println("警告：未从kmData中提取到JSON代码块，使用原始内容");
-                    }
-                    createBody.put("caseContent", cleanedJson);
+                    createBody.put("caseContent", kmData);
                     createBody.put("title", caseName);  // 使用实际用例名称作为标题
                     createBody.put("channel", 1);
                     createBody.put("bizId", "-1");
@@ -112,4 +97,124 @@ public class AgileTcServiceImpl implements AgileTcService {
         return result;
 
     }
+
+    @Override
+    public MindMap convertMarkdownToKityMinder(String markdown) {
+        // 1. 解析Markdown为结构化节点树
+        MarkdownNode rootNode = parseMarkdown(markdown);
+
+        // 2. 转换为MindMap结构
+        MindMap mindMap = new MindMap();
+        MindMap.Root root = new MindMap.Root();
+
+        if (rootNode != null && !rootNode.getChildren().isEmpty()) {
+            // 根节点使用第一级标题
+            MarkdownNode firstChild = rootNode.getChildren().get(0);
+            root.setData(createNodeData(firstChild.getText()));
+
+            // 递归转换子节点
+            List<MindMap.Node> children = convertChildren(firstChild.getChildren());
+            root.setChildren(children);
+        } else {
+            // 处理空文档情况
+            root.setData(createNodeData("Untitled"));
+        }
+
+        mindMap.setRoot(root);
+        return mindMap;
+    }
+
+
+    private MarkdownNode parseMarkdown(String markdown) {
+        // 创建虚拟根节点（层级0）
+        MarkdownNode root = new MarkdownNode(0, "");
+        List<MarkdownNode> stack = new ArrayList<>();
+        stack.add(root);
+
+        // 按行处理Markdown
+        String[] lines = markdown.split("\\r?\\n");
+        for (String line : lines) {
+            if (line.trim().isEmpty()) continue;
+
+            // 解析标题级别
+            Matcher headingMatcher = Pattern.compile("^(#+)\\s+(.+)$").matcher(line);
+            if (headingMatcher.find()) {
+                int level = headingMatcher.group(1).length();
+                String text = headingMatcher.group(2).trim();
+
+                // 创建新节点
+                MarkdownNode node = new MarkdownNode(level, text);
+
+                // 找到父节点（栈中最后一个层级小于当前层级的节点）
+                while (!stack.isEmpty() && stack.get(stack.size() - 1).getLevel() >= level) {
+                    stack.remove(stack.size() - 1);
+                }
+
+                // 添加到父节点的子节点
+                stack.get(stack.size() - 1).getChildren().add(node);
+                stack.add(node);
+            }
+            // 解析列表项
+            else if (line.matches("^\\s*[-*]\\s+.+$")) {
+                // 计算缩进级别（每2个空格为一级）
+                int indent = 0;
+                for (char c : line.toCharArray()) {
+                    if (c == ' ') indent++;
+                    else break;
+                }
+                int level = (indent / 2) + 1; // 基础层级从1开始
+
+                // 提取文本内容
+                String text = line.replaceFirst("^\\s*[-*]\\s+", "").trim();
+
+                // 创建新节点
+                MarkdownNode node = new MarkdownNode(level, text);
+
+                // 找到父节点
+                while (!stack.isEmpty() && stack.get(stack.size() - 1).getLevel() >= level) {
+                    stack.remove(stack.size() - 1);
+                }
+
+                // 添加到父节点的子节点
+                stack.get(stack.size() - 1).getChildren().add(node);
+                stack.add(node);
+            }
+        }
+
+        return root;
+    }
+
+
+    private List<MindMap.Node> convertChildren(List<MarkdownNode> markdownNodes) {
+        List<MindMap.Node> nodes = new ArrayList<>();
+
+        for (MarkdownNode mdNode : markdownNodes) {
+            MindMap.Node node = new MindMap.Node();
+            node.setData(createNodeData(mdNode.getText()));
+
+            // 递归处理子节点
+            if (!mdNode.getChildren().isEmpty()) {
+                node.setChildren(convertChildren(mdNode.getChildren()));
+            } else {
+                node.setChildren(new ArrayList<>());
+            }
+
+            nodes.add(node);
+        }
+
+        return nodes;
+    }
+
+    private MindMap.NodeData createNodeData(String text) {
+        MindMap.NodeData nodeData = new MindMap.NodeData();
+        nodeData.setId(generateId());
+        nodeData.setCreated(System.currentTimeMillis());
+        nodeData.setText(text);
+        return nodeData;
+    }
+
+    private String generateId() {
+        return UUID.randomUUID().toString().replace("-", "").substring(0, 11);
+    }
+
 }

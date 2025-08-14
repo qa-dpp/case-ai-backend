@@ -13,6 +13,8 @@ import com.fingertip.caseaibackend.aiproxies.nodes.CaseGenerateNode;
 import com.fingertip.caseaibackend.aiproxies.nodes.CaseReviewerNode;
 import com.fingertip.caseaibackend.aiproxies.nodes.FeedbackDispatcher;
 import com.fingertip.caseaibackend.commons.Consts;
+import com.fingertip.caseaibackend.entity.MindMap;
+import com.fingertip.caseaibackend.service.AgileTcService;
 import com.fingertip.caseaibackend.vo.ApiResult;
 import com.fingertip.caseaibackend.entity.CaseInfo;
 import com.fingertip.caseaibackend.dtos.CaseSaveReq;
@@ -35,6 +37,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.util.json.JsonParser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ByteArrayResource;
@@ -69,9 +72,6 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import static com.alibaba.cloud.ai.dashscope.common.DashScopeApiConstants.MESSAGE_FORMAT;
 import static com.alibaba.cloud.ai.graph.StateGraph.END;
@@ -79,7 +79,6 @@ import static com.alibaba.cloud.ai.graph.StateGraph.START;
 import static com.alibaba.cloud.ai.graph.action.AsyncEdgeAction.edge_async;
 import static com.alibaba.cloud.ai.graph.action.AsyncNodeAction.node_async;
 import static com.fingertip.caseaibackend.commons.Consts.ANALYZE_PROMPT;
-import static com.fingertip.caseaibackend.entity.KityMinderNode.*;
 
 
 @RestController
@@ -98,7 +97,7 @@ public class AiChatController {
     private CaseInfoService caseInfoService;
 
     @Autowired
-    private RestTemplate restTemplate;
+    private AgileTcService agileTcService;
 
 
     public AiChatController(@Qualifier("analyzeModel") ChatModel analyzeModel, @Qualifier("generateModel") ChatModel generateModel, @Qualifier("reviewerModel") ChatModel reviewerModel, @Qualifier("formatModel") ChatModel formatModel, @Qualifier("visualModel") ChatModel visualModel) {
@@ -399,10 +398,11 @@ public class AiChatController {
             result.setMessage("用例保存成功");
             result.setData(dbResult);
             //转换为KityMinder格式的数据并保存到agileTC
-            String kmData = convertMarkdownToKityMinder(caseSaveReq.getCaseContent());
+            MindMap mindMap = agileTcService.convertMarkdownToKityMinder(caseSaveReq.getCaseContent());
+            String kmData = JSON.toJSONString(mindMap);
             //String kmData = convertToKityMinderFormat(caseSaveReq.getCaseContent());
             //调用agileTC的用例创建接口
-            ApiResult<Boolean> apiResult = saveToAgileTc(kmData, caseSaveReq.getCaseName(), result);
+            ApiResult<Boolean> apiResult = agileTcService.saveToAgileTc(kmData, caseSaveReq.getCaseName(), result);
             if (apiResult.getCode() == 200) {
                 result.setCode(apiResult.getCode());
                 result.setMessage(apiResult.getMessage());
@@ -415,212 +415,9 @@ public class AiChatController {
         return result;
     }
 
-    private String convertMarkdownToKityMinder(String caseContent) {
-        return null;
-    }
-
-    private ApiResult<Boolean> saveToAgileTc(String kmData, String caseName, ApiResult<Boolean> result) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        try {
-            // 1. 调用GET接口检查用例是否存在
-            String encodedCaseName = URLEncoder.encode(caseName, StandardCharsets.UTF_8.name());
-            String getUrl = String.format(
-                    "https://agile.leoao-inc.com/api/case/list?pageSize=10&pageNum=1&productLineId=1&caseType=0&title=%s&creator=&channel=1&requirementId=&bizId=root",
-                    encodedCaseName  // 使用编码后的名称进行替换
-            );
-            ResponseEntity<Map> getResponse = restTemplate.getForEntity(getUrl, Map.class);
-
-            if (getResponse.getStatusCode().is2xxSuccessful() && getResponse.getBody() != null) {
-                Map<String, Object> responseBody = getResponse.getBody();
-                List<Map<String, Object>> dataSources = (List<Map<String, Object>>) responseBody.get("dataSources");
-
-                if (dataSources == null || dataSources.isEmpty()) {
-                    // 2. 用例不存在，调用创建接口
-                    Map<String, Object> createBody = new HashMap<>();
-                    createBody.put("productLineId", 1);
-                    createBody.put("creator", "admin");
-                    createBody.put("caseType", 0);
-                    // 正则表达式匹配 ```json 和 ``` 之间的内容（包含换行符）
-//                    Pattern pattern = Pattern.compile(
-//                            "([`']){3}\\s*json\\s*([\\s\\S]*?)\\s*\\1",  // 捕获组2：JSON内容
-//                            Pattern.CASE_INSENSITIVE
-//                    );
-//                    Matcher matcher = pattern.matcher(kmData);
-                    String cleanedJson = kmData;  // 初始化为原始数据，保留所有字符
-
-//                    if (matcher.find()) {
-//                        // 提取JSON内容并去除首尾空白（保留转义字符）
-//                        cleanedJson = matcher.group(2).trim();
-//                    } else {
-//                        // 未找到JSON代码块，记录警告日志
-//                        System.out.println("警告：未从kmData中提取到JSON代码块，使用原始内容");
-//                    }
-                    createBody.put("caseContent", cleanedJson);
-                    createBody.put("title", caseName);  // 使用实际用例名称作为标题
-                    createBody.put("channel", 1);
-                    createBody.put("bizId", "-1");
-                    createBody.put("id", "");
-                    createBody.put("description", "");
-
-                    HttpEntity<Map<String, Object>> createRequest = new HttpEntity<>(createBody, headers);
-                    ResponseEntity<String> createResponse = restTemplate.postForEntity(
-                            "https://agile.leoao-inc.com/api/case/create",
-                            createRequest,
-                            String.class
-                    );
-                    if (createResponse.getStatusCode().is2xxSuccessful()) {
-                        result.setMessage("用例保存成功并同步创建到agileTC");
-                    } else {
-                        result.setMessage("用例保存成功，但agileTC创建失败: " + createResponse.getStatusCode());
-                    }
-                } else {
-                    // 3. 用例已存在，调用更新接口
-                    Map<String, Object> existingCase = dataSources.get(0);  // 获取第一个匹配用例
-                    String caseId = (String) existingCase.get("id");  // 获取现有用例ID
-
-                    Map<String, Object> updateBody = new HashMap<>();
-                    updateBody.put("id", caseId);
-                    updateBody.put("title", "更新内容，实际不会保存title");  // 按需求固定标题
-                    updateBody.put("modifier", "admin");
-                    updateBody.put("caseContent", kmData);  // 更新用例内容
-
-                    HttpEntity<Map<String, Object>> updateRequest = new HttpEntity<>(updateBody, headers);
-                    ResponseEntity<String> updateResponse = restTemplate.postForEntity(
-                            "https://agile.leoao-inc.com/api/case/update",
-                            updateRequest,
-                            String.class
-                    );
-                    if (updateResponse.getStatusCode().is2xxSuccessful()) {
-                        result.setMessage("用例保存成功并同步更新到agileTC");
-                    } else {
-                        result.setMessage("用例保存成功，但agileTC更新失败: " + updateResponse.getStatusCode());
-                    }
-                }
-            } else {
-                result.setMessage("用例保存成功，但agileTC查询接口调用失败");
-            }
-        } catch (Exception e) {
-            result.setMessage("用例保存成功，但同步agileTC时发生错误: " + e.getMessage());
-        }
-        return result;
-
-    }
-
-    public static void main(String[] args) {
-        String markdown = "# 管理后台API接口_后台下拉选查询聚划算活动测试用例\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_001] 模糊匹配查询存在活动名称的聚划算活动\n" +
-                "- **测试目标**: 验证根据活动名称模糊匹配查询聚划算活动的正确性\n" +
-                "- **前置条件**: 系统中存在多个聚划算活动数据，包含\"聚划算\"关键词的活动名称\n" +
-                "- **优先级**: P0\n" +
-                "- **预期结果**: 返回包含匹配活动名称的活动列表，且每个活动名称字段为\"活动名称+活动ID\"格式\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_002] 模糊匹配查询不存在活动名称的聚划算活动\n" +
-                "- **测试目标**: 验证当活动名称不存在时的查询处理\n" +
-                "- **前置条件**: 系统中不存在包含\"xyz123\"关键词的聚划算活动\n" +
-                "- **优先级**: P1\n" +
-                "- **预期结果**: 返回空列表或提示\"未找到匹配活动\"\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_003] 模糊匹配查询包含大小写混合的活动名称\n" +
-                "- **测试目标**: 验证大小写不敏感的模糊匹配逻辑\n" +
-                "- **前置条件**: 系统中存在活动名称为\"JUHUA_SUAN\"的聚划算活动\n" +
-                "- **优先级**: P0\n" +
-                "- **预期结果**: 输入\"juhua\"或\"JUHUA\"时返回该活动，名称字段为\"JUHUA_SUAN+活动ID\"\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_004] 模糊匹配查询包含特殊字符的活动名称\n" +
-                "- **测试目标**: 验证特殊字符的模糊匹配处理\n" +
-                "- **前置条件**: 系统中存在活动名称为\"聚划算-活动\"的聚划算活动\n" +
-                "- **优先级**: P1\n" +
-                "- **预期结果**: 输入\"聚划算\"或\"聚划算-\"时返回该活动，名称字段为\"聚划算-活动+活动ID\"\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_005] 空字符串查询所有聚划算活动\n" +
-                "- **测试目标**: 验证空字符串参数的处理逻辑\n" +
-                "- **前置条件**: 系统中存在至少3个聚划算活动\n" +
-                "- **优先级**: P0\n" +
-                "- **预期结果**: 返回所有聚划算活动列表，名称字段为\"活动名称+活动ID\"格式\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_006] 超长活动名称模糊匹配\n" +
-                "- **测试目标**: 验证超长名称参数的边界处理\n" +
-                "- **前置条件**: 系统中存在活动名称长度为255字符的聚划算活动\n" +
-                "- **优先级**: P2\n" +
-                "- **预期结果**: 输入完整名称时返回该活动，输入部分超长字符时返回匹配结果\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_007] 活动ID反查名称验证\n" +
-                "- **测试目标**: 验证根据活动ID反查活动名称的正确性\n" +
-                "- **前置条件**: 系统中存在活动ID为\"1001\"的聚划算活动\n" +
-                "- **优先级**: P0\n" +
-                "- **预期结果**: 当传入活动ID\"1001\"时，返回的名称字段为\"活动名称+1001\"格式\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_008] 无效活动ID反查处理\n" +
-                "- **测试目标**: 验证无效活动ID的反查逻辑\n" +
-                "- **前置条件**: 系统中不存在活动ID为\"9999\"的聚划算活动\n" +
-                "- **优先级**: P1\n" +
-                "- **预期结果**: 返回空列表或提示\"未找到对应活动\"\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_009] 参数缺失时的默认行为\n" +
-                "- **测试目标**: 验证name参数缺失时的处理\n" +
-                "- **前置条件**: 调用接口时未传name参数\n" +
-                "- **优先级**: P2\n" +
-                "- **预期结果**: 返回系统默认的活动列表（如全部活动或错误提示）\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_010] 参数类型错误处理\n" +
-                "- **测试目标**: 验证name参数类型错误时的容错能力\n" +
-                "- **前置条件**: 传入name参数为数字类型（如12345）\n" +
-                "- **优先级**: P1\n" +
-                "- **预期结果**: 返回错误提示\"参数类型错误\"或空列表\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_011] 活动名称完全匹配\n" +
-                "- **测试目标**: 验证精确匹配场景\n" +
-                "- **前置条件**: 系统中存在活动名称为\"聚划算秋季促销\"的活动\n" +
-                "- **优先级**: P0\n" +
-                "- **预期结果**: 输入\"聚划算秋季促销\"时返回该活动，名称字段为\"聚划算秋季促销+活动ID\"\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_012] 活动名称部分匹配\n" +
-                "- **测试目标**: 验证部分匹配场景\n" +
-                "- **前置条件**: 系统中存在活动名称为\"聚划算秋季大促\"的活动\n" +
-                "- **优先级**: P0\n" +
-                "- **预期结果**: 输入\"秋季\"时返回该活动，名称字段为\"聚划算秋季大促+活动ID\"\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_013] 多个匹配结果返回\n" +
-                "- **测试目标**: 验证多结果返回的正确性\n" +
-                "- **前置条件**: 系统中存在3个包含\"聚划算\"关键词的活动\n" +
-                "- **优先级**: P0\n" +
-                "- **预期结果**: 返回3个活动列表，每个名称字段为\"活动名称+活动ID\"格式\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_014] 活动名称中英文混合匹配\n" +
-                "- **测试目标**: 验证中英文混合名称的模糊匹配\n" +
-                "- **前置条件**: 系统中存在活动名称为\"JuHuaSuan 2023\"的聚划算活动\n" +
-                "- **优先级**: P1\n" +
-                "- **预期结果**: 输入\"JuHua\"或\"2023\"时返回该活动，名称字段为\"JuHuaSuan 2023+活动ID\"\n" +
-                "\n" +
-                "## [管理后台API接口_后台下拉选查询聚划算活动_015] 活动名称空格处理\n" +
-                "- **测试目标**: 验证名称中空格的模糊匹配\n" +
-                "- **前置条件**: 系统中存在活动名称为\"聚划算 活动\"的聚划算活动\n" +
-                "- **优先级**: P1\n" +
-                "- **预期结果**: 输入\"聚划算活动\"或\"聚划算 活动\"时返回该活动，名称字段为\"聚划算 活动+活动ID\"";
-        //KityMinderData kityMinderData = convertMarkdownToKityMinder(markdown);
-        //System.out.println(toJson(kityMinderData));
-    }
-
-
-
-    // 获取标题级别（#的数量）
-    private static int getHeadingLevel(String line) {
-        int level = 0;
-        while (level < line.length() && line.charAt(level) == '#') {
-            level++;
-        }
-        // 确保后面有空格
-        if (level < line.length() && line.charAt(level) != ' ') {
-            throw new IllegalArgumentException("Invalid heading format: " + line);
-        }
-        return level;
-    }
-
 
     /**
-     * 转换为KityMinder格式
+     * 使用AI转换为KityMinder格式
      *
      * @param caseContent
      * @return
