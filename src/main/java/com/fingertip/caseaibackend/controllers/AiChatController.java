@@ -85,8 +85,6 @@ import static com.fingertip.caseaibackend.commons.Consts.ANALYZE_PROMPT;
 @RequestMapping("/ai-api")
 public class AiChatController {
 
-    private static final String DEFAULT_PROMPT = "你好，介绍下你自己！";
-
     private final ChatClient openAiAnalyzeChatClient;
     private final ChatClient openAiGenerateChatClient;
     private final ChatClient openAiReviewerChatClient;
