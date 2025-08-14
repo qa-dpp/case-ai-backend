@@ -305,10 +305,14 @@ public class AiChatController {
             state.registerKeyAndStrategy(Consts.ORIGIN_MESSAGE, new ReplaceStrategy());
             state.registerKeyAndStrategy(Consts.CASE_INFO_MESSAGE, new ReplaceStrategy());
             state.registerKeyAndStrategy(Consts.CASE_REVIEW_MESSAGE, new ReplaceStrategy());
+            state.registerKeyAndStrategy(Consts.RETRY_COUNT,new ReplaceStrategy());
+            state.registerKeyAndStrategy(Consts.REVIEW_SCORE,new ReplaceStrategy());
+            state.registerKeyAndStrategy(Consts.REVIEW_RESULT,new ReplaceStrategy());
             //state.registerKeyAndStrategy(Consts.CASE_FORMAT_MESSAGE, new ReplaceStrategy());
             return state;
         };
         StateGraph graph = new StateGraph(stateFactory)
+
                 .addNode("generate", node_async(new CaseGenerateNode(openAiGenerateChatClient)))
                 .addNode("review", node_async(new CaseReviewerNode(openAiReviewerChatClient)))
                 //.addNode("format", node_async(new CaseFormatNode(openAiFormatChatClient)))
@@ -316,7 +320,7 @@ public class AiChatController {
                 .addEdge("generate", "review")
                 //.addEdge("format", END)
                 //.addConditionalEdges("review", edge_async(new FeedbackDispatcher()), Map.of("positive", "format", "negative", "generate"));
-                .addConditionalEdges("review", edge_async(new FeedbackDispatcher()), Map.of("positive", END, "negative", "generate"));
+                .addConditionalEdges("review", edge_async(new FeedbackDispatcher()), Map.of("pass", END, "fail", "generate","error",END));
 
 
         CompiledGraph compile = graph.compile();
@@ -325,9 +329,9 @@ public class AiChatController {
         map.put(Consts.ORIGIN_MESSAGE, originMessage);
 
         //判断是否有历史用例，如果有则用续写的prompt,否则使用非续写的prompt
-        String caseName = chatDto.getCaseId();
-        if (!StringUtils.isBlank(caseName)) {
-            CaseInfo caseInfo1 = caseInfoService.getOne(new LambdaQueryWrapper<CaseInfo>().eq(CaseInfo::getId, caseName));
+        String caseId = chatDto.getCaseId();
+        if (!StringUtils.isBlank(caseId)) {
+            CaseInfo caseInfo1 = caseInfoService.getOne(new LambdaQueryWrapper<CaseInfo>().eq(CaseInfo::getId, caseId));
             if (caseInfo1 != null) {
                 map.put(Consts.OLD_TESTCASE_MESSAGE, caseInfo1.getCaseContent());
             }

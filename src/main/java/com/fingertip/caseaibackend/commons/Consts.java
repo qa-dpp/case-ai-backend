@@ -36,7 +36,13 @@ public class Consts {
                     ```markdown
                       markmap支持的markdown格式
                     ```
-                                              
+             ---
+            # 当前上下文:
+            %s
+            
+            ---
+            # 需求描述:
+            %s                             
              """;
 
 
@@ -53,12 +59,36 @@ public class Consts {
             """;
 
     public static final String CASE_REVIEWER_PROMPT = """
-            您是一名资深测试架构师，能够根据需求点对测试用例进行评审。
-            # 重要规则：
-            1. 检查用例是否完整，必须包含用例ID（[模块]_[序号]）、测试目标、前置条件、优先级（P0-P3）、预期结果。
-            2. 检查用例是否包含了原始文档中所有的流程分支
-            3. 如测试用例覆盖不足，请分条给出具体建议；   否则请输出“APPROVE”
-             """;
+            你是一位资深测试专家，请严格评审以下测试用例。要求：
+            1. 评审维度及权重：
+               - 需求覆盖率 (30%%): 是否覆盖所有需求点及核心场景
+               - 步骤清晰度 (25%%): 步骤是否明确、可执行、无歧义
+               - 测试数据完整性 (20%%): 是否包含有效测试数据
+               - 边界场景覆盖 (15%%): 是否考虑边界值和异常场景
+               - 格式规范性 (10%%): 是否符合markmap的markdown格式
+            2. 输出格式（严格JSON）:
+               {
+                 "score": 0-100, // 综合评分
+                 "result": "pass"|"fail", // 评审结果（≥80分通过）
+                 "feedback": "具体反馈文本",
+                 "improvements": ["改进建议1", "改进建议2"]
+               }
+            3. 评审标准：
+               - 90-100: 优秀，无需修改
+               - 80-89: 良好，少量改进建议
+               - 70-79: 及格，需要改进
+               - <70: 不及格，需要重写
+            4. 对每个维度给出具体评分和反馈
+            5. 至少提供3条具体改进建议
+            
+            ---
+            # 原始需求:
+            %s
+            
+            ---
+            # 待评审用例:
+            %s
+            """;
 
     public static final String CASE_FORMAT_PROMPT = """
             您是一个专业的数据转换器，将markmap格式的数据转换成kityminder支持的数据格式，数据格式实例：
@@ -77,4 +107,7 @@ public class Consts {
     public static final String CASE_INFO_MESSAGE = "caseInfoMessage";
     public static final String CASE_REVIEW_MESSAGE = "caseReviewMessage";
     public static final String CASE_FORMAT_MESSAGE = "caseFormatMessage";
+    public static final String RETRY_COUNT= "retryCount";
+    public static final String REVIEW_SCORE= "reviewScore";
+    public static final String REVIEW_RESULT = "reviewResult";
 }
