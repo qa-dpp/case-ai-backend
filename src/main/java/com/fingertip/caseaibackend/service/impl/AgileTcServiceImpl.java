@@ -1,10 +1,13 @@
 package com.fingertip.caseaibackend.service.impl;
 
+import com.fingertip.caseaibackend.commons.Consts;
 import com.fingertip.caseaibackend.dtos.MarkdownNode;
 import com.fingertip.caseaibackend.entity.MindMap;
 import com.fingertip.caseaibackend.service.AgileTcService;
 import com.fingertip.caseaibackend.vo.ApiResult;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -20,8 +23,12 @@ import java.util.regex.Pattern;
 
 @Service
 public class AgileTcServiceImpl implements AgileTcService {
+    @Value("${agileTc.url}")
+    private String agileTcUrl = "";
+
     @Autowired
     private RestTemplate restTemplate;
+
 
     @Override
     public ApiResult<Boolean> saveToAgileTc(String kmData, String caseName, ApiResult<Boolean> result)    {
@@ -30,8 +37,8 @@ public class AgileTcServiceImpl implements AgileTcService {
         try {
             // 1. 调用GET接口检查用例是否存在
             String encodedCaseName = URLEncoder.encode(caseName, StandardCharsets.UTF_8.name());
-            String getUrl = String.format(
-                    "https://agile.leoao-inc.com/api/case/list?pageSize=10&pageNum=1&productLineId=1&caseType=0&title=%s&creator=&channel=1&requirementId=&bizId=root",
+            String getUrl = String.format(agileTcUrl+
+                    "/api/case/list?pageSize=10&pageNum=1&productLineId=1&caseType=0&title=%s&creator=&channel=1&requirementId=&bizId=root",
                     encodedCaseName  // 使用编码后的名称进行替换
             );
             ResponseEntity<Map> getResponse = restTemplate.getForEntity(getUrl, Map.class);
@@ -55,7 +62,7 @@ public class AgileTcServiceImpl implements AgileTcService {
 
                     HttpEntity<Map<String, Object>> createRequest = new HttpEntity<>(createBody, headers);
                     ResponseEntity<String> createResponse = restTemplate.postForEntity(
-                            "https://agile.leoao-inc.com/api/case/create",
+                            agileTcUrl+ "/api/case/create",
                             createRequest,
                             String.class
                     );
@@ -77,7 +84,7 @@ public class AgileTcServiceImpl implements AgileTcService {
 
                     HttpEntity<Map<String, Object>> updateRequest = new HttpEntity<>(updateBody, headers);
                     ResponseEntity<String> updateResponse = restTemplate.postForEntity(
-                            "https://agile.leoao-inc.com/api/case/update",
+                            agileTcUrl+"/api/case/update",
                             updateRequest,
                             String.class
                     );
@@ -96,6 +103,8 @@ public class AgileTcServiceImpl implements AgileTcService {
         return result;
 
     }
+
+
 
     @Override
     public MindMap convertMarkdownToKityMinder(String markdown) {
@@ -259,4 +268,8 @@ public class AgileTcServiceImpl implements AgileTcService {
     private String generateId() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 11);
     }
+
+
+
+
 }

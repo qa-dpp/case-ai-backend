@@ -416,21 +416,7 @@ public class AiChatController {
     }
 
 
-    /**
-     * 使用AI转换为KityMinder格式
-     *
-     * @param caseContent
-     * @return
-     */
-    private String convertToKityMinderFormat(String caseContent) {
-        String content = Consts.CASE_FORMAT_PROMPT + "\n\n" + caseContent;
-        ChatResponse response = openAiFormatChatClient.prompt(content).call().chatResponse();
-        String output = null;
-        if (response != null) {
-            output = response.getResult().getOutput().getText();
-        }
-        return output;
-    }
+
 
     /**
      * 根据用例名称查询测试用例列表
