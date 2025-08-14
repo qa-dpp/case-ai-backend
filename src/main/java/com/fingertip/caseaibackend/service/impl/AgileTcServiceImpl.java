@@ -1,6 +1,6 @@
 package com.fingertip.caseaibackend.service.impl;
 
-import com.fingertip.caseaibackend.entity.MarkdownNode;
+import com.fingertip.caseaibackend.dtos.MarkdownNode;
 import com.fingertip.caseaibackend.entity.MindMap;
 import com.fingertip.caseaibackend.service.AgileTcService;
 import com.fingertip.caseaibackend.vo.ApiResult;
@@ -9,7 +9,6 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -100,90 +99,134 @@ public class AgileTcServiceImpl implements AgileTcService {
 
     @Override
     public MindMap convertMarkdownToKityMinder(String markdown) {
-        // 1. 解析Markdown为结构化节点树
-        MarkdownNode rootNode = parseMarkdown(markdown);
+        // 解析Markdown为节点列表
+        List<MarkdownNode> nodes = parseMarkdownLines(markdown);
 
-        // 2. 转换为MindMap结构
-        MindMap mindMap = new MindMap();
-        MindMap.Root root = new MindMap.Root();
+        // 构建节点树
+        MarkdownNode rootNode = buildNodeTree(nodes);
 
-        if (rootNode != null && !rootNode.getChildren().isEmpty()) {
-            // 根节点使用第一级标题
-            MarkdownNode firstChild = rootNode.getChildren().get(0);
-            root.setData(createNodeData(firstChild.getText()));
-
-            // 递归转换子节点
-            List<MindMap.Node> children = convertChildren(firstChild.getChildren());
-            root.setChildren(children);
-        } else {
-            // 处理空文档情况
-            root.setData(createNodeData("Untitled"));
-        }
-
-        mindMap.setRoot(root);
-        return mindMap;
+        // 转换为MindMap结构
+        return convertToMindMap(rootNode);
     }
 
 
-    private MarkdownNode parseMarkdown(String markdown) {
-        // 创建虚拟根节点（层级0）
-        MarkdownNode root = new MarkdownNode(0, "");
-        List<MarkdownNode> stack = new ArrayList<>();
-        stack.add(root);
-
-        // 按行处理Markdown
+    private List<MarkdownNode> parseMarkdownLines(String markdown) {
+        List<MarkdownNode> nodes = new ArrayList<>();
         String[] lines = markdown.split("\\r?\\n");
+
+        int currentDepth = 0; // 当前层级深度
+        int lastIndent = -1;  // 上一个列表项的缩进量
+        int lastDepth = 0;    // 上一个节点的深度
+        boolean lastWasHeading = false;
+
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
 
-            // 解析标题级别
+            // 解析标题
             Matcher headingMatcher = Pattern.compile("^(#+)\\s+(.+)$").matcher(line);
             if (headingMatcher.find()) {
                 int level = headingMatcher.group(1).length();
                 String text = headingMatcher.group(2).trim();
 
-                // 创建新节点
-                MarkdownNode node = new MarkdownNode(level, text);
+                // 标题的深度就是其级别
+                currentDepth = level;
+                nodes.add(new MarkdownNode(currentDepth, text, false));
 
-                // 找到父节点（栈中最后一个层级小于当前层级的节点）
-                while (!stack.isEmpty() && stack.get(stack.size() - 1).getLevel() >= level) {
-                    stack.remove(stack.size() - 1);
-                }
-
-                // 添加到父节点的子节点
-                stack.get(stack.size() - 1).getChildren().add(node);
-                stack.add(node);
+                lastDepth = currentDepth;
+                lastWasHeading = true;
+                lastIndent = -1;
+                continue;
             }
+
             // 解析列表项
-            else if (line.matches("^\\s*[-*]\\s+.+$")) {
-                // 计算缩进级别（每2个空格为一级）
-                int indent = 0;
-                for (char c : line.toCharArray()) {
-                    if (c == ' ') indent++;
-                    else break;
+            Matcher listMatcher = Pattern.compile("^(\\s*)[-*+]\\s+(.+)$").matcher(line);
+            if (listMatcher.find()) {
+                int indent = listMatcher.group(1).length();
+                String text = listMatcher.group(2).trim();
+
+                // 计算当前列表项的深度
+                if (lastWasHeading) {
+                    // 标题后的第一个列表项，深度+1
+                    currentDepth = lastDepth + 1;
+                } else if (lastIndent >= 0) {
+                    // 连续列表项，根据缩进变化计算深度
+                    if (indent > lastIndent) {
+                        // 缩进增加，深度+1
+                        currentDepth = lastDepth + 1;
+                    } else if (indent < lastIndent) {
+                        // 缩进减少，计算深度减少值
+                        int indentDiff = lastIndent - indent;
+                        int depthDiff = (indentDiff + 1) / 2; // 每2个空格为一级
+                        currentDepth = Math.max(lastDepth - depthDiff, 1);
+                    } else {
+                        // 缩进不变，深度不变
+                        currentDepth = lastDepth;
+                    }
+                } else {
+                    // 文档开头的列表项
+                    currentDepth = 1;
                 }
-                int level = (indent / 2) + 1; // 基础层级从1开始
 
-                // 提取文本内容
-                String text = line.replaceFirst("^\\s*[-*]\\s+", "").trim();
+                nodes.add(new MarkdownNode(currentDepth, text, true));
 
-                // 创建新节点
-                MarkdownNode node = new MarkdownNode(level, text);
-
-                // 找到父节点
-                while (!stack.isEmpty() && stack.get(stack.size() - 1).getLevel() >= level) {
-                    stack.remove(stack.size() - 1);
-                }
-
-                // 添加到父节点的子节点
-                stack.get(stack.size() - 1).getChildren().add(node);
-                stack.add(node);
+                lastDepth = currentDepth;
+                lastWasHeading = false;
+                lastIndent = indent;
+                continue;
             }
+
+            // 处理普通文本行（附加到上一个节点）
+            if (!nodes.isEmpty()) {
+                MarkdownNode lastNode = nodes.get(nodes.size() - 1);
+                lastNode.setText(lastNode.getText() + "\n" + line.trim());
+            }
+        }
+
+        return nodes;
+    }
+
+    private MarkdownNode buildNodeTree(List<MarkdownNode> nodes) {
+        // 创建虚拟根节点（深度0）
+        MarkdownNode root = new MarkdownNode(0, "", false);
+        Stack<MarkdownNode> stack = new Stack<>();
+        stack.push(root);
+
+        for (MarkdownNode node : nodes) {
+            // 弹出层级大于等于当前节点的所有节点
+            while (stack.size() > 1 && stack.peek().getDepth() >= node.getDepth()) {
+                stack.pop();
+            }
+
+            // 当前节点添加到栈顶节点的子节点
+            MarkdownNode parent = stack.peek();
+            parent.getChildren().add(node);
+            stack.push(node);
         }
 
         return root;
     }
 
+    private MindMap convertToMindMap(MarkdownNode root) {
+        MindMap mindMap = new MindMap();
+
+        // 处理空文档情况
+        if (root.getChildren().isEmpty()) {
+            MindMap.Root rootNode = new MindMap.Root();
+            rootNode.setData(createNodeData("Untitled"));
+            mindMap.setRoot(rootNode);
+            return mindMap;
+        }
+
+        // 创建MindMap根节点
+        MindMap.Root rootNode = new MindMap.Root();
+        rootNode.setData(createNodeData("Document Root"));
+
+        // 转换所有一级节点
+        rootNode.setChildren(convertChildren(root.getChildren()));
+
+        mindMap.setRoot(rootNode);
+        return mindMap;
+    }
 
     private List<MindMap.Node> convertChildren(List<MarkdownNode> markdownNodes) {
         List<MindMap.Node> nodes = new ArrayList<>();
@@ -216,5 +259,4 @@ public class AgileTcServiceImpl implements AgileTcService {
     private String generateId() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 11);
     }
-
 }
