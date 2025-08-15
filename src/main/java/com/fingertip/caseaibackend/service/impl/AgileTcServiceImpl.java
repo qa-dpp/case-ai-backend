@@ -1,11 +1,11 @@
 package com.fingertip.caseaibackend.service.impl;
 
-import com.fingertip.caseaibackend.commons.Consts;
+import com.alibaba.fastjson.JSON;
 import com.fingertip.caseaibackend.dtos.MarkdownNode;
 import com.fingertip.caseaibackend.entity.MindMap;
-import com.fingertip.caseaibackend.service.AgileTcService;
+import com.fingertip.caseaibackend.enums.StorageType;
+import com.fingertip.caseaibackend.service.CaseSaveOrUpdate;
 import com.fingertip.caseaibackend.vo.ApiResult;
-import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -22,7 +22,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-public class AgileTcServiceImpl implements AgileTcService {
+public class AgileTcServiceImpl implements CaseSaveOrUpdate {
+
     @Value("${agileTc.url}")
     private String agileTcUrl = "";
 
@@ -31,7 +32,15 @@ public class AgileTcServiceImpl implements AgileTcService {
 
 
     @Override
-    public ApiResult<Boolean> saveToAgileTc(String kmData, String caseName, ApiResult<Boolean> result)    {
+    public StorageType getStorageType() {
+        return StorageType.AGILETC;
+    }
+
+    @Override
+    public ApiResult<Boolean> saveOrUpdate(String caseInfoOfMarkDown, String caseName, ApiResult<Boolean> result)    {
+        //格式转换
+        String kmData = JSON.toJSONString(convertMarkdownToKityMinder(caseInfoOfMarkDown));
+        //调用agileTC的接口进行存储或更新
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         try {
@@ -106,8 +115,8 @@ public class AgileTcServiceImpl implements AgileTcService {
 
 
 
-    @Override
-    public MindMap convertMarkdownToKityMinder(String markdown) {
+
+    private MindMap convertMarkdownToKityMinder(String markdown) {
         // 解析Markdown为节点列表
         List<MarkdownNode> nodes = parseMarkdownLines(markdown);
 

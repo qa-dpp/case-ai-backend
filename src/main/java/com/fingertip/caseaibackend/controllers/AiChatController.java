@@ -15,6 +15,7 @@ import com.fingertip.caseaibackend.aiproxies.nodes.FeedbackDispatcher;
 import com.fingertip.caseaibackend.commons.Consts;
 import com.fingertip.caseaibackend.entity.MindMap;
 import com.fingertip.caseaibackend.service.AgileTcService;
+import com.fingertip.caseaibackend.service.CaseSaveOrUpdate;
 import com.fingertip.caseaibackend.vo.ApiResult;
 import com.fingertip.caseaibackend.entity.CaseInfo;
 import com.fingertip.caseaibackend.dtos.CaseSaveReq;
@@ -95,7 +96,7 @@ public class AiChatController {
     private CaseInfoService caseInfoService;
 
     @Autowired
-    private AgileTcService agileTcService;
+    private CaseSaveOrUpdate caseSaveOrUpdate;
 
 
     public AiChatController(@Qualifier("analyzeModel") ChatModel analyzeModel, @Qualifier("generateModel") ChatModel generateModel, @Qualifier("reviewerModel") ChatModel reviewerModel, @Qualifier("formatModel") ChatModel formatModel, @Qualifier("visualModel") ChatModel visualModel) {
@@ -399,12 +400,9 @@ public class AiChatController {
             result.setCode(200);
             result.setMessage("用例保存成功");
             result.setData(dbResult);
-            //转换为KityMinder格式的数据并保存到agileTC
-            MindMap mindMap = agileTcService.convertMarkdownToKityMinder(caseSaveReq.getCaseContent());
-            String kmData = JSON.toJSONString(mindMap);
-            //String kmData = convertToKityMinderFormat(caseSaveReq.getCaseContent());
-            //调用agileTC的用例创建接口
-            ApiResult<Boolean> apiResult = agileTcService.saveToAgileTc(kmData, caseSaveReq.getCaseName(), result);
+
+            //第三方平台存储
+            ApiResult<Boolean> apiResult = caseSaveOrUpdate.saveOrUpdate(caseSaveReq.getCaseContent(), caseSaveReq.getCaseName(), result);
             if (apiResult.getCode() == 200) {
                 result.setCode(apiResult.getCode());
                 result.setMessage(apiResult.getMessage());
