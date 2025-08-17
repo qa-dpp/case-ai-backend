@@ -8,7 +8,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum StorageType {
     AGILETC(1, "agileTc"),
-    METERSPHERE(2, "metersphere");
+    DEFAULT(2, "default");
     private Integer value;
     private String desc;
 

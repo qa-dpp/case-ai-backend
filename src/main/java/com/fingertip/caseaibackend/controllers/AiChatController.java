@@ -13,7 +13,9 @@ import com.fingertip.caseaibackend.aiproxies.nodes.CaseGenerateNode;
 import com.fingertip.caseaibackend.aiproxies.nodes.CaseReviewerNode;
 import com.fingertip.caseaibackend.aiproxies.nodes.FeedbackDispatcher;
 import com.fingertip.caseaibackend.commons.Consts;
-import com.fingertip.caseaibackend.service.CaseSaveOrUpdate;
+import com.fingertip.caseaibackend.enums.StorageType;
+import com.fingertip.caseaibackend.service.ThirdPartCaseFactory;
+import com.fingertip.caseaibackend.service.ThirdPartCaseService;
 import com.fingertip.caseaibackend.vo.ApiResult;
 import com.fingertip.caseaibackend.entity.CaseInfo;
 import com.fingertip.caseaibackend.dtos.CaseSaveReq;
@@ -37,6 +39,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
@@ -64,6 +67,7 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.util.stream.Collectors;
 
 import static com.alibaba.cloud.ai.dashscope.common.DashScopeApiConstants.MESSAGE_FORMAT;
 import static com.alibaba.cloud.ai.graph.StateGraph.END;
@@ -83,11 +87,16 @@ public class AiChatController {
     private final ChatClient openAiFormatChatClient;
     private final ChatClient openAiVisualChatClient;
 
+
+
     @Autowired
     private CaseInfoService caseInfoService;
 
     @Autowired
-    private CaseSaveOrUpdate caseSaveOrUpdate;
+    private ThirdPartCaseService thirdPartCaseService;
+
+    @Autowired
+    private ThirdPartCaseFactory thirdPartCaseFactory;
 
 
     public AiChatController(@Qualifier("analyzeModel") ChatModel analyzeModel, @Qualifier("generateModel") ChatModel generateModel, @Qualifier("reviewerModel") ChatModel reviewerModel, @Qualifier("formatModel") ChatModel formatModel, @Qualifier("visualModel") ChatModel visualModel) {
@@ -393,19 +402,24 @@ public class AiChatController {
             result.setData(dbResult);
 
             //第三方平台存储
-            ApiResult<Boolean> apiResult = caseSaveOrUpdate.saveOrUpdate(caseSaveReq.getCaseContent(), caseSaveReq.getCaseName(), result);
-            if (apiResult.getCode() == 200) {
-                result.setCode(apiResult.getCode());
-                result.setMessage(apiResult.getMessage());
+            //根据thirdPartType的配置，生成对象
+
+            try {
+                thirdPartCaseFactory.exec(caseSaveReq.getCaseContent(), caseSaveReq.getCaseName());
+            } catch (Exception e) {
+                result.setCode(400004);
+                result.setMessage("第三方平台用例保存失败");
+                result.setData(dbResult);
                 return result;
             }
+
+
         }
         result.setCode(400003);
         result.setMessage("用例保存失败");
         result.setData(dbResult);
         return result;
     }
-
 
 
 

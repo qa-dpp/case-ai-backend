@@ -13,13 +13,6 @@ public class FeedbackDispatcher implements EdgeAction {
 
         String reviewResult = (String) t.value(Consts.REVIEW_RESULT).orElse("error");
 
-        // 传递详细反馈给生成节点
-        if ("fail".equals(reviewResult)) {
-            Map<String, Object> updated = new HashMap<>();
-            updated.put(Consts.CASE_REVIEW_MESSAGE,
-                    t.value(Consts.CASE_REVIEW_MESSAGE).orElse(""));
-        }
-
         return reviewResult;
     }
 }

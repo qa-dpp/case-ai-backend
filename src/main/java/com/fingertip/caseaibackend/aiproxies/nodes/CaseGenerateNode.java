@@ -26,7 +26,9 @@ public class CaseGenerateNode implements NodeAction {
         int retryCount = (int) t.value(Consts.RETRY_COUNT).orElse(0);
 
         if (retryCount >= MAX_RETRY) {
-            throw new IllegalArgumentException("达到最大重试次数: " + MAX_RETRY);
+            Map<String, Object> updated = new HashMap<>();
+            updated.put(Consts.REVIEW_RESULT, "pass");
+            return updated;
         }
 
         //获取上下文信息

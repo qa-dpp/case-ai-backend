@@ -4,8 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.fingertip.caseaibackend.dtos.MarkdownNode;
 import com.fingertip.caseaibackend.entity.MindMap;
 import com.fingertip.caseaibackend.enums.StorageType;
-import com.fingertip.caseaibackend.service.CaseSaveOrUpdate;
-import com.fingertip.caseaibackend.vo.ApiResult;
+import com.fingertip.caseaibackend.service.ThirdPartCaseService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -15,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -22,7 +22,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-public class AgileTcServiceImpl implements CaseSaveOrUpdate {
+public class AgileTcServiceImpl implements ThirdPartCaseService {
 
     @Value("${agileTc.url}")
     private String agileTcUrl = "";
@@ -37,7 +37,7 @@ public class AgileTcServiceImpl implements CaseSaveOrUpdate {
     }
 
     @Override
-    public ApiResult<Boolean> saveOrUpdate(String caseInfoOfMarkDown, String caseName, ApiResult<Boolean> result)    {
+    public void saveOrUpdate(String caseInfoOfMarkDown, String caseName)    {
         //格式转换
         String kmData = JSON.toJSONString(convertMarkdownToKityMinder(caseInfoOfMarkDown));
         //调用agileTC的接口进行存储或更新
@@ -46,8 +46,8 @@ public class AgileTcServiceImpl implements CaseSaveOrUpdate {
         try {
             // 1. 调用GET接口检查用例是否存在
             String encodedCaseName = URLEncoder.encode(caseName, StandardCharsets.UTF_8.name());
-            String getUrl = String.format(agileTcUrl+
-                    "/api/case/list?pageSize=10&pageNum=1&productLineId=1&caseType=0&title=%s&creator=&channel=1&requirementId=&bizId=root",
+            String getUrl = String.format(agileTcUrl +
+                            "/api/case/list?pageSize=10&pageNum=1&productLineId=1&caseType=0&title=%s&creator=&channel=1&requirementId=&bizId=root",
                     encodedCaseName  // 使用编码后的名称进行替换
             );
             ResponseEntity<Map> getResponse = restTemplate.getForEntity(getUrl, Map.class);
@@ -71,15 +71,10 @@ public class AgileTcServiceImpl implements CaseSaveOrUpdate {
 
                     HttpEntity<Map<String, Object>> createRequest = new HttpEntity<>(createBody, headers);
                     ResponseEntity<String> createResponse = restTemplate.postForEntity(
-                            agileTcUrl+ "/api/case/create",
+                            agileTcUrl + "/api/case/create",
                             createRequest,
                             String.class
                     );
-                    if (createResponse.getStatusCode().is2xxSuccessful()) {
-                        result.setMessage("用例保存成功并同步创建到agileTC");
-                    } else {
-                        result.setMessage("用例保存成功，但agileTC创建失败: " + createResponse.getStatusCode());
-                    }
                 } else {
                     // 3. 用例已存在，调用更新接口
                     Map<String, Object> existingCase = dataSources.get(0);  // 获取第一个匹配用例
@@ -93,23 +88,16 @@ public class AgileTcServiceImpl implements CaseSaveOrUpdate {
 
                     HttpEntity<Map<String, Object>> updateRequest = new HttpEntity<>(updateBody, headers);
                     ResponseEntity<String> updateResponse = restTemplate.postForEntity(
-                            agileTcUrl+"/api/case/update",
+                            agileTcUrl + "/api/case/update",
                             updateRequest,
                             String.class
                     );
-                    if (updateResponse.getStatusCode().is2xxSuccessful()) {
-                        result.setMessage("用例保存成功并同步更新到agileTC");
-                    } else {
-                        result.setMessage("用例保存成功，但agileTC更新失败: " + updateResponse.getStatusCode());
-                    }
+
                 }
-            } else {
-                result.setMessage("用例保存成功，但agileTC查询接口调用失败");
             }
-        } catch (Exception e) {
-            result.setMessage("用例保存成功，但同步agileTC时发生错误: " + e.getMessage());
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
         }
-        return result;
 
     }
 
