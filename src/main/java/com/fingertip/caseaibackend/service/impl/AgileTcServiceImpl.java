@@ -37,7 +37,7 @@ public class AgileTcServiceImpl implements ThirdPartCaseService {
     }
 
     @Override
-    public void saveOrUpdate(String caseInfoOfMarkDown, String caseName)    {
+    public void saveOrUpdate(String caseName,String caseInfoOfMarkDown)    {
         //格式转换
         String kmData = JSON.toJSONString(convertMarkdownToKityMinder(caseInfoOfMarkDown));
         //调用agileTC的接口进行存储或更新

@@ -12,7 +12,7 @@ import java.util.Map;
 
 public class CaseGenerateNode implements NodeAction {
     private final ChatClient chatClient;
-    private static final int MAX_RETRY = 3;
+
 
     public CaseGenerateNode(ChatClient chatClient) {
         this.chatClient = chatClient;
@@ -22,14 +22,6 @@ public class CaseGenerateNode implements NodeAction {
 
     @Override
     public Map<String, Object> apply(OverAllState t) {
-        // 获取重试次数并检查上限
-        int retryCount = (int) t.value(Consts.RETRY_COUNT).orElse(0);
-
-        if (retryCount >= MAX_RETRY) {
-            Map<String, Object> updated = new HashMap<>();
-            updated.put(Consts.REVIEW_RESULT, "pass");
-            return updated;
-        }
 
         //获取上下文信息
         String old_testcase_message = (String) t.value(Consts.OLD_TESTCASE_MESSAGE).orElse("");
@@ -49,7 +41,7 @@ public class CaseGenerateNode implements NodeAction {
         if (!case_reviewer_message.isEmpty()) {
             contextBuilder.append("评审反馈:\n").append(case_reviewer_message).append("\n\n");
         }
-        if (!caseInfo.isEmpty() && retryCount > 0) {
+        if (!caseInfo.isEmpty()) {
             contextBuilder.append("上次生成的用例:\n").append(caseInfo).append("\n\n");
         }
 
@@ -70,7 +62,7 @@ public class CaseGenerateNode implements NodeAction {
 
         Map<String, Object> updated = new HashMap<>();
         updated.put(Consts.CASE_INFO_MESSAGE, output);
-        updated.put(Consts.RETRY_COUNT, retryCount + 1);
+
 
         return updated;
     }

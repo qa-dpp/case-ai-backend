@@ -67,7 +67,6 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.util.stream.Collectors;
 
 import static com.alibaba.cloud.ai.dashscope.common.DashScopeApiConstants.MESSAGE_FORMAT;
 import static com.alibaba.cloud.ai.graph.StateGraph.END;
@@ -88,12 +87,8 @@ public class AiChatController {
     private final ChatClient openAiVisualChatClient;
 
 
-
     @Autowired
     private CaseInfoService caseInfoService;
-
-    @Autowired
-    private ThirdPartCaseService thirdPartCaseService;
 
     @Autowired
     private ThirdPartCaseFactory thirdPartCaseFactory;
@@ -165,6 +160,7 @@ public class AiChatController {
                 if (fileName.endsWith(".docx") || fileName.endsWith(".pdf")) {
                     // 处理docx文件
                     List<Media> mediaList = null;
+                    byte[] pdfBytes = null;
                     if (fileName.endsWith(".docx")) {
                         XWPFDocument docxDoc = new XWPFDocument(file.getInputStream());
                         ByteArrayOutputStream pdfOutputStream = new ByteArrayOutputStream();
@@ -172,26 +168,25 @@ public class AiChatController {
                         PdfOptions options = PdfOptions.create();
                         PdfConverter.getInstance().convert(docxDoc, pdfOutputStream, options);
 
-                        byte[] pdfBytes = pdfOutputStream.toByteArray();
-
-                        mediaList = convertPdfToImages(pdfBytes);
+                        pdfBytes = pdfOutputStream.toByteArray();
 
                     }
                     // 处理pdf文件
                     else if (fileName.endsWith(".pdf")) {
-                        //读取pdf文件内容
-                        try (PDDocument document = Loader.loadPDF(file.getBytes())) {
-                            // 使用 PDFTextStripper 提取文本内容
-                            org.apache.pdfbox.text.PDFTextStripper stripper = new org.apache.pdfbox.text.PDFTextStripper();
-                            String pdfText = stripper.getText(document);
-                            contentBuilder.append(pdfText).append("\n");
-                        } catch (IOException e) {
-                            result.setMessage("PDF 文件读取失败: " + e.getMessage());
-                            result.setCode(500);
-                            return result;
-                        }
-                        mediaList = convertPdfToImages(file.getBytes());
+                        pdfBytes = file.getBytes();
                     }
+                    //读取pdf文件内容
+                    try (PDDocument document = Loader.loadPDF(pdfBytes)) {
+                        // 使用 PDFTextStripper 提取文本内容
+                        org.apache.pdfbox.text.PDFTextStripper stripper = new org.apache.pdfbox.text.PDFTextStripper();
+                        String pdfText = stripper.getText(document);
+                        contentBuilder.append(pdfText).append("\n");
+                    } catch (IOException e) {
+                        result.setMessage("PDF 文件读取失败: " + e.getMessage());
+                        result.setCode(500);
+                        return result;
+                    }
+                    mediaList = convertPdfToImages(pdfBytes);
                     if (mediaList != null && !mediaList.isEmpty()) {
 
                         UserMessage message =
@@ -306,9 +301,8 @@ public class AiChatController {
             state.registerKeyAndStrategy(Consts.ORIGIN_MESSAGE, new ReplaceStrategy());
             state.registerKeyAndStrategy(Consts.CASE_INFO_MESSAGE, new ReplaceStrategy());
             state.registerKeyAndStrategy(Consts.CASE_REVIEW_MESSAGE, new ReplaceStrategy());
-            state.registerKeyAndStrategy(Consts.RETRY_COUNT,new ReplaceStrategy());
-            state.registerKeyAndStrategy(Consts.REVIEW_SCORE,new ReplaceStrategy());
-            state.registerKeyAndStrategy(Consts.REVIEW_RESULT,new ReplaceStrategy());
+            state.registerKeyAndStrategy(Consts.RETRY_COUNT, new ReplaceStrategy());
+            state.registerKeyAndStrategy(Consts.REVIEW_SCORE, new ReplaceStrategy());
             //state.registerKeyAndStrategy(Consts.CASE_FORMAT_MESSAGE, new ReplaceStrategy());
             return state;
         };
@@ -321,7 +315,7 @@ public class AiChatController {
                 .addEdge("generate", "review")
                 //.addEdge("format", END)
                 //.addConditionalEdges("review", edge_async(new FeedbackDispatcher()), Map.of("positive", "format", "negative", "generate"));
-                .addConditionalEdges("review", edge_async(new FeedbackDispatcher()), Map.of("pass", END, "fail", "generate","error",END));
+                .addConditionalEdges("review", edge_async(new FeedbackDispatcher()), Map.of("pass", END, "fail", "generate"));
 
 
         CompiledGraph compile = graph.compile();
@@ -405,7 +399,7 @@ public class AiChatController {
             //根据thirdPartType的配置，生成对象
 
             try {
-                thirdPartCaseFactory.exec(caseSaveReq.getCaseContent(), caseSaveReq.getCaseName());
+                thirdPartCaseFactory.exec(caseSaveReq.getCaseName(),caseSaveReq.getCaseContent());
             } catch (Exception e) {
                 result.setCode(400004);
                 result.setMessage("第三方平台用例保存失败");
@@ -420,7 +414,6 @@ public class AiChatController {
         result.setData(dbResult);
         return result;
     }
-
 
 
     /**

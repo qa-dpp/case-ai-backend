@@ -7,5 +7,5 @@ public interface ThirdPartCaseService {
     //存储渠道
     StorageType getStorageType();
     //保存
-    void saveOrUpdate(String caseInfo, String caseName);
+    void saveOrUpdate( String caseName,String caseInfo);
 }

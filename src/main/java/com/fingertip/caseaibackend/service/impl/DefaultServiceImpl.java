@@ -10,6 +10,6 @@ public class DefaultServiceImpl implements ThirdPartCaseService {
     }
 
     @Override
-    public void saveOrUpdate(String caseInfo, String caseName) {
+    public void saveOrUpdate(String caseName,String caseInfo) {
     }
 }

@@ -25,6 +25,7 @@ public class CaseReviewerNode implements NodeAction {
     private static final Logger logger = LoggerFactory.getLogger(CaseReviewerNode.class);
     private static final String DEFAULT_FEEDBACK = "未提供具体反馈";
     private final ChatClient chatClient;
+    private static final int MAX_RETRY = 3;
 
     public CaseReviewerNode(ChatClient chatClient) {
         this.chatClient = chatClient;
@@ -33,16 +34,17 @@ public class CaseReviewerNode implements NodeAction {
 
     @Override
     public Map<String, Object> apply(OverAllState t) {
+
         //获取上下文信息
         String originMessage = (String) t.value(Consts.ORIGIN_MESSAGE).orElse("");
         String caseInfo = (String) t.value(Consts.CASE_INFO_MESSAGE).orElse("");
-        String reviewResultMessage = (String) t.value(Consts.REVIEW_RESULT).orElse("");
+        //String reviewResultMessage = (String) t.value(Consts.REVIEW_RESULT).orElse("");
         if (!StringUtils.hasText(caseInfo)) {
             throw new IllegalArgumentException("用例信息为空，请检查！");
         }
-        if ("pass".equals(reviewResultMessage)) {
-            return Map.of(Consts.REVIEW_RESULT, "pass");
-        }
+//        if ("pass".equals(reviewResultMessage)) {
+//            return Map.of(Consts.REVIEW_RESULT, "pass");
+//        }
 
         // 构建结构化评审提示词
         String prompt = buildStructuredReviewPrompt(originMessage, caseInfo);
@@ -61,7 +63,6 @@ public class CaseReviewerNode implements NodeAction {
         Map<String, Object> updated = new HashMap<>();
         updated.put(Consts.CASE_REVIEW_MESSAGE, reviewResult.get("feedback"));
         updated.put(Consts.REVIEW_SCORE, reviewResult.get("score"));
-        updated.put(Consts.REVIEW_RESULT, reviewResult.get("result"));
         updated.put(Consts.RAW_OUTPUT, output);
         return updated;
     }
@@ -88,9 +89,9 @@ public class CaseReviewerNode implements NodeAction {
         String feedback = extractFeedback(jsonContent);
         result.put("feedback", feedback);
 
-        // 步骤4: 确定评审结果
-        String reviewResult = score >= 90 ? "pass" : "fail";
-        result.put("result", reviewResult);
+//        // 步骤4: 确定评审结果
+//        String reviewResult = score >= 90 ? "pass" : "fail";
+//        result.put("result", reviewResult);
 
         // 步骤5: 保留原始输出用于调试
         result.put("raw_output", rawOutput);

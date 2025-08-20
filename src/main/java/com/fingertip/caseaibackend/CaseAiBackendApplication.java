@@ -5,6 +5,8 @@ import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import java.util.List;
+
 @SpringBootApplication
 @MapperScan("com.fingertip.caseaibackend.mapper")
 public class CaseAiBackendApplication {
@@ -12,7 +14,6 @@ public class CaseAiBackendApplication {
     public static void main(String[] args) {
         SpringApplication.run(CaseAiBackendApplication.class, args);
     }
-
 }
 
 
