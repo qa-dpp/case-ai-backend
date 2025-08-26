@@ -159,7 +159,6 @@ public class AiChatController {
 
                 if (fileName.endsWith(".docx") || fileName.endsWith(".pdf")) {
                     // 处理docx文件
-                    List<Media> mediaList = null;
                     byte[] pdfBytes = null;
                     if (fileName.endsWith(".docx")) {
                         XWPFDocument docxDoc = new XWPFDocument(file.getInputStream());
@@ -167,33 +166,107 @@ public class AiChatController {
                         // 使用POI将docx转换为PDF
                         PdfOptions options = PdfOptions.create();
                         PdfConverter.getInstance().convert(docxDoc, pdfOutputStream, options);
-
                         pdfBytes = pdfOutputStream.toByteArray();
-
                     }
                     // 处理pdf文件
                     else if (fileName.endsWith(".pdf")) {
                         pdfBytes = file.getBytes();
                     }
-                    //读取pdf文件内容
-                    try (PDDocument document = Loader.loadPDF(pdfBytes)) {
-                        // 使用 PDFTextStripper 提取文本内容
-                        org.apache.pdfbox.text.PDFTextStripper stripper = new org.apache.pdfbox.text.PDFTextStripper();
-                        String pdfText = stripper.getText(document);
-                        contentBuilder.append(pdfText).append("\n");
-                    } catch (IOException e) {
-                        result.setMessage("PDF 文件读取失败: " + e.getMessage());
-                        result.setCode(500);
-                        return result;
+                    // 创建临时保存目录（若不存在则自动创建）
+                    File saveDir = new File("/tmp/temp_images");
+                    if (!saveDir.exists()) {
+                        saveDir.mkdirs();
+                        System.out.println("临时图片目录已创建: " + saveDir.getAbsolutePath());
                     }
-                    mediaList = convertPdfToImages(pdfBytes);
-                    if (mediaList != null && !mediaList.isEmpty()) {
+                    try (PDDocument pdfDoc = Loader.loadPDF(pdfBytes)) {
+                        // 存储图片信息和AI描述的列表
+                        List<ImageInfo> imageInfoList = new ArrayList<>();
 
-                        UserMessage message =
-                                UserMessage.builder().text(Consts.VISUAL_PROMPT).media(mediaList).metadata(new HashMap<>()).build();
-                        message.getMetadata().put(MESSAGE_FORMAT, MessageFormat.IMAGE);
-                        String content = openAiVisualChatClient.prompt(new Prompt(message)).call().content();
-                        contentBuilder.append(content).append("\n");
+                        // 自定义PDF文本提取器，在图片位置插入占位符
+                        PDFTextStripperWithImagePlaceholders stripper = new PDFTextStripperWithImagePlaceholders(imageInfoList);
+                        stripper.setSortByPosition(true);
+                        String contentWithPlaceholders = stripper.getText(pdfDoc);
+
+                        // 遍历PDF每一页，提取内嵌图片并分析
+                        for (int pageNum = 0; pageNum < pdfDoc.getNumberOfPages(); pageNum++) {
+                            PDPage page = pdfDoc.getPage(pageNum);
+                            int currentPageNum = pageNum;
+
+                            // 创建PDF内容流处理器，用于识别图片对象
+                            PDFStreamEngine imageExtractor = new PDFStreamEngine() {
+                                @Override
+                                protected void processOperator(Operator operator, List<COSBase> operands) throws IOException {
+                                    String operation = operator.getName();
+                                    // 处理图片绘制操作符（Do指令）
+                                    if ("Do".equals(operation)) {
+                                        COSName xObjectName = (COSName) operands.get(0);
+                                        PDXObject xObject = getResources().getXObject(xObjectName);
+
+                                        // 验证是否为图片对象
+                                        if (xObject instanceof PDImageXObject imageXObject) {
+                                            BufferedImage bufferedImage = imageXObject.getImage();
+                                            String suffix = imageXObject.getSuffix();
+                                            String mimeType = switch (suffix.toLowerCase()) {
+                                                case "png" -> "image/png";
+                                                case "jpg", "jpeg" -> "image/jpeg";
+                                                case "gif" -> "image/gif";
+                                                case "bmp" -> "image/bmp";
+                                                default -> "image/jpeg";
+                                            };
+                                            String formatName = suffix;
+
+                                            // 获取图片字节数组
+                                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                            ImageIO.write(bufferedImage, formatName, baos);
+                                            byte[] imageBytes = baos.toByteArray();
+
+                                            // 生成保存文件名
+                                            String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+                                            String fileName = String.format("extracted_image_%s_page_%d_img_%d.%s",
+                                                    timestamp, currentPageNum + 1, imageInfoList.size() + 1, formatName);
+                                            File outputFile = new File(saveDir, fileName);
+
+                                            // 保存提取的图片到临时文件
+                                            try (FileOutputStream fos = new FileOutputStream(outputFile)) {
+                                                fos.write(imageBytes);
+                                            }
+                                            System.out.printf("提取图片: 页码=%d, 格式=%s, 大小=%.2fKB, 保存路径=%s%n",
+                                                    currentPageNum + 1, mimeType, (double) imageBytes.length / 1024, outputFile.getAbsolutePath());
+
+                                            // 创建Media对象并调用AI分析图片内容
+                                            ByteArrayResource imageResource = new ByteArrayResource(imageBytes);
+                                            Media media = Media.builder()
+                                                    .name(UUID.randomUUID().toString())
+                                                    .mimeType(MimeTypeUtils.parseMimeType(mimeType))
+                                                    .data(imageResource)
+                                                    .build();
+
+                                            // 调用AI分析图片内容
+                                            UserMessage message = UserMessage.builder()
+                                                    .text(Consts.VISUAL_PROMPT)
+                                                    .media(Collections.singletonList(media))
+                                                    .metadata(new HashMap<>())
+                                                    .build();
+                                            String imageDescription = openAiVisualChatClient.prompt(new Prompt(message)).call().content();
+
+                                            // 记录图片信息和AI描述
+                                            imageInfoList.add(new ImageInfo(currentPageNum, imageDescription));
+                                        }
+                                    } else {
+                                        super.processOperator(operator, operands);
+                                    }
+                                }
+                            };
+                            imageExtractor.processPage(page);
+                        }
+
+                        // 替换文本中的图片占位符为AI描述
+                        String finalContent = contentWithPlaceholders;
+                        for (int i = 0; i < imageInfoList.size(); i++) {
+                            String placeholder = String.format("{media%d}", i);
+                            finalContent = finalContent.replace(placeholder, imageInfoList.get(i).getDescription());
+                        }
+                        contentBuilder.append(finalContent).append("\n");
                     }
                 } else {
                     if (!file.isEmpty()) {
@@ -212,14 +285,11 @@ public class AiChatController {
             String content = contentBuilder.toString();
 
             String resp = openAiAnalyzeChatClient
-                    .prompt(ANALYZE_PROMPT)
-                    .user(content)
+                    .prompt(buildStructuredReviewPrompt(content))
                     .call()
                     .content();
 
             result.setData(resp);
-//            result.setData(content);
-//            Thread.sleep(1000);
             result.setMessage("解析完成");
             result.setCode(200);
 
@@ -231,40 +301,8 @@ public class AiChatController {
         return result;
     }
 
-
-    private List<Media> convertPdfToImages(byte[] file) throws IOException {
-        List<Media> mediaList = new ArrayList<>();
-        try (PDDocument document = Loader.loadPDF(file)) {
-            PDFRenderer renderer = new PDFRenderer(document);
-            for (int page = 0; page < document.getNumberOfPages(); page++) {
-                BufferedImage image = renderer.renderImageWithDPI(page, 300);
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(image, "jpg", baos);
-                byte[] imageBytes = baos.toByteArray();
-                ByteArrayResource resource = new ByteArrayResource(imageBytes);
-                mediaList.add(new Media(MimeTypeUtils.IMAGE_JPEG, resource));
-//                mediaList.add(Media.builder().mimeType(MimeTypeUtils.IMAGE_PNG).data(resource).name(UUID.randomUUID().toString()).build());
-
-               /* // 创建保存目录（如果不存在）
-                File saveDir = new File("D:\\temp_images");
-                if (!saveDir.exists()) {
-                    saveDir.mkdirs();
-                }
-
-                // 生成文件名：年月日时分秒+序号.png
-                SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
-                String timestamp = sdf.format(new Date());
-                String fileName = timestamp + "_" + (page + 1) + ".jpg";
-                File outputFile = new File(saveDir, fileName);
-
-                // 保存图片到文件
-                try (FileOutputStream fos = new FileOutputStream(outputFile)) {
-                    fos.write(imageBytes);
-                }*/
-
-            }
-        }
-        return mediaList;
+    private String buildStructuredReviewPrompt(String originMessage) {
+        return String.format(Consts.ANALYZE_PROMPT, originMessage);
     }
 
     @PostMapping(path = "/stream/file/upload", produces = "text/event-stream")

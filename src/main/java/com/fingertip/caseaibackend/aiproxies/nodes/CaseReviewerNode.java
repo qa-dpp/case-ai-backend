@@ -38,13 +38,10 @@ public class CaseReviewerNode implements NodeAction {
         //获取上下文信息
         String originMessage = (String) t.value(Consts.ORIGIN_MESSAGE).orElse("");
         String caseInfo = (String) t.value(Consts.CASE_INFO_MESSAGE).orElse("");
-        //String reviewResultMessage = (String) t.value(Consts.REVIEW_RESULT).orElse("");
         if (!StringUtils.hasText(caseInfo)) {
             throw new IllegalArgumentException("用例信息为空，请检查！");
         }
-//        if ("pass".equals(reviewResultMessage)) {
-//            return Map.of(Consts.REVIEW_RESULT, "pass");
-//        }
+
 
         // 构建结构化评审提示词
         String prompt = buildStructuredReviewPrompt(originMessage, caseInfo);
@@ -89,11 +86,7 @@ public class CaseReviewerNode implements NodeAction {
         String feedback = extractFeedback(jsonContent);
         result.put("feedback", feedback);
 
-//        // 步骤4: 确定评审结果
-//        String reviewResult = score >= 90 ? "pass" : "fail";
-//        result.put("result", reviewResult);
-
-        // 步骤5: 保留原始输出用于调试
+        // 步骤4: 保留原始输出用于调试
         result.put("raw_output", rawOutput);
 
         return result;
