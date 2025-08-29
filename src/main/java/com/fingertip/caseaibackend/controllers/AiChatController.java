@@ -22,6 +22,7 @@ import com.fingertip.caseaibackend.dtos.CaseSaveReq;
 import com.fingertip.caseaibackend.dtos.ChatDto;
 import com.fingertip.caseaibackend.dtos.CaseQueryRequest;
 import com.fingertip.caseaibackend.service.CaseInfoService;
+import org.apache.commons.io.FileUtils;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.contentstream.PDFStreamEngine;
 import org.apache.pdfbox.contentstream.operator.Operator;
@@ -266,8 +267,15 @@ public class AiChatController {
                             String placeholder = String.format("{media%d}", i);
                             finalContent = finalContent.replace(placeholder, imageInfoList.get(i).getDescription());
                         }
+                        //清空临时目录
+                        FileUtils.cleanDirectory(saveDir);
                         contentBuilder.append(finalContent).append("\n");
+                    }catch (Exception e){
+                        result.setMessage("文件处理异常-单文件解析: " + e.getMessage());
+                        result.setCode(500);
+                        return result;
                     }
+
                 } else {
                     if (!file.isEmpty()) {
                         contentBuilder.append(file.getOriginalFilename()).append(":\n");
@@ -438,6 +446,10 @@ public class AiChatController {
 
             try {
                 thirdPartCaseFactory.exec(caseSaveReq.getCaseName(),caseSaveReq.getCaseContent());
+                result.setCode(200);
+                result.setMessage("第三方用例保存成功");
+                result.setData(dbResult);
+                return result;
             } catch (Exception e) {
                 result.setCode(400004);
                 result.setMessage("第三方平台用例保存失败");

@@ -24,9 +24,9 @@ public class ThirdPartCaseFactory {
     public void exec(String caseName,String caseInfo) {
         for (ThirdPartCaseService thirdPartCaseService : thirdPartCaseService) {
             for (String thirdPartType : thirdPartType) {
-                StorageType storageType = StorageType.valueOf(thirdPartType);
+                StorageType storageType = StorageType.getValueByDesc(thirdPartType);
                 if (thirdPartCaseService.getStorageType().equals(storageType)) {
-                    thirdPartCaseService.saveOrUpdate(caseInfo, caseName);
+                    thirdPartCaseService.saveOrUpdate(caseName, caseInfo);
                 }
             }
         }

@@ -3,6 +3,7 @@ package com.fingertip.caseaibackend.enums;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
+import opennlp.tools.util.StringUtil;
 
 @Getter
 @AllArgsConstructor
@@ -12,12 +13,12 @@ public enum StorageType {
     private Integer value;
     private String desc;
 
-    public static StorageType fromValue(Integer value) {
-        if (value == null) {
+    public static StorageType getValueByDesc(String desc) {
+        if (StringUtil.isEmpty(desc)) {
             return null;
         }
         for (StorageType storageType : StorageType.values()) {
-            if (storageType.getValue().equals(value)) {
+            if (storageType.getDesc().equals(desc)) {
                 return storageType;
             }
         }
