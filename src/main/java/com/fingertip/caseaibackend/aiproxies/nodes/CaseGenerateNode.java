@@ -13,12 +13,18 @@ import java.util.Map;
 public class CaseGenerateNode implements NodeAction {
     private final ChatClient chatClient;
 
+
     public CaseGenerateNode(ChatClient chatClient) {
         this.chatClient = chatClient;
     }
 
+
+
     @Override
     public Map<String, Object> apply(OverAllState t) {
+
+        //获取上下文信息
+        String old_testcase_message = (String) t.value(Consts.OLD_TESTCASE_MESSAGE).orElse("");
         String origin_message = (String) t.value(Consts.ORIGIN_MESSAGE).orElse("");
         String case_reviewer_message = (String) t.value(Consts.CASE_REVIEW_MESSAGE).orElse("");
         String caseInfo = (String) t.value(Consts.CASE_INFO_MESSAGE).orElse("");
@@ -26,13 +32,29 @@ public class CaseGenerateNode implements NodeAction {
         if (!StringUtils.hasText(origin_message)) {
             throw new IllegalArgumentException("没有找到原始消息");
         }
-        String content = Consts.CASE_WRITER_PROMPT +"\n\n"+origin_message;
-        //如果是用例打回，则凭借历史用例信息和建议
-        if (StringUtils.hasText(case_reviewer_message) && StringUtils.hasText(caseInfo)) {
-            content = "%s\n# 原始需求:\n%s\n\n# 上个版本需求用例:\n%s \n# 专家意见:%s\n".formatted(Consts.CASE_WRITER_PROMPT,origin_message, caseInfo, case_reviewer_message);
+
+        //构建动态上下文
+        StringBuilder contextBuilder = new StringBuilder();
+        if (!old_testcase_message.isEmpty()) {
+            contextBuilder.append("历史用例参考:\n").append(old_testcase_message).append("\n\n");
+        }
+        if (!case_reviewer_message.isEmpty()) {
+            contextBuilder.append("评审反馈:\n").append(case_reviewer_message).append("\n\n");
+        }
+        if (!caseInfo.isEmpty()) {
+            contextBuilder.append("上次生成的用例:\n").append(caseInfo).append("\n\n");
         }
 
-        ChatResponse response = chatClient.prompt(content).call().chatResponse();
+
+        // 构建提示词
+        String prompt = String.format(
+                Consts.CASE_WRITER_PROMPT,
+                contextBuilder.toString(),
+                origin_message
+        );
+
+        //调用大模型生成用例
+        ChatResponse response = chatClient.prompt(prompt).call().chatResponse();
         String output = null;
         if (response != null) {
             output = response.getResult().getOutput().getText();
@@ -40,6 +62,7 @@ public class CaseGenerateNode implements NodeAction {
 
         Map<String, Object> updated = new HashMap<>();
         updated.put(Consts.CASE_INFO_MESSAGE, output);
+
 
         return updated;
     }

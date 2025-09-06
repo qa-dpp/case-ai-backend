@@ -1,4 +1,4 @@
-package com.fingertip.caseaibackend.dtos;
+package com.fingertip.caseaibackend.vo;
 
 import lombok.Getter;
 import lombok.Setter;

@@ -16,6 +16,24 @@
         <spring-ai-alibaba.version>1.0.0.2</spring-ai-alibaba.version>
     </properties>
     <dependencies>
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>3.5.12</version>
+        </dependency>
+
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>8.0.18</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-pdf-document-reader</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- 添加docx转PDF依赖 -->
         <dependency>
             <groupId>fr.opensagres.xdocreport</groupId>
@@ -131,7 +149,7 @@
                 <version>${spring-boot.version}</version>
                 <configuration>
                     <mainClass>com.fingertip.caseaibackend.CaseAiBackendApplication</mainClass>
-                    <skip>true</skip>
+                    <skip>false</skip>
                 </configuration>
                 <executions>
                     <execution>

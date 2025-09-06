@@ -40,7 +40,7 @@ public class LLMConfig {
     public ChatModel generateModel() {
         OpenAiChatOptions options = new OpenAiChatOptions();
         options.setModel(generate_Model);   // 模型类型
-        options.setTemperature(0.7);       // 随机性控制
+        options.setTemperature(0.3); //随机性控制
         return OpenAiChatModel.builder().openAiApi(OpenAiApi.builder().apiKey(generate_apiKey).baseUrl(generate_baseUrl).build()).defaultOptions(options).build();
     }
 
@@ -55,7 +55,7 @@ public class LLMConfig {
     public ChatModel reviewerModel() {
         OpenAiChatOptions options = new OpenAiChatOptions();
         options.setModel(reviewer_Model);   // 模型类型
-        options.setTemperature(0.7);       // 随机性控制
+        options.setTemperature(0.3);       // 随机性控制
         return OpenAiChatModel.builder().openAiApi(OpenAiApi.builder().apiKey(reviewer_apiKey).baseUrl(reviewer_baseUrl).build()).defaultOptions(options).build();
     }
 

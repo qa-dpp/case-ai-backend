@@ -1,12 +1,18 @@
 server:
   port: 8080
 
+
 spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/mydb?useSSL=false&useUnicode=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+    username: XXX
+    password: XXX
+    driver-class-name: com.mysql.cj.jdbc.Driver
   application:
     name: spring-ai-alibaba-openai-chat-model-example
   ai:
     openai:
-      api-key: xxx
+      api-key: sk-XXX
       base-url: https://api.siliconflow.cn/
       chat:
         options:
@@ -17,28 +23,39 @@ spring:
       max-request-size: 50MB
 case-model:
   visual:
-    api-key: xxx
+    api-key: sk-XX
     base-url: https://api.siliconflow.cn/
     model: Qwen/Qwen2.5-VL-72B-Instruct
   analyze:
-    api-key: xxx
+    api-key: sk-XX
     base-url: https://api.siliconflow.cn/
     model: deepseek-ai/DeepSeek-R1
   generate:
-    api-key: xxx
+    api-key: sk-XX
     base-url: https://api.siliconflow.cn/
-    model: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+    model: Qwen/Qwen3-30B-A3B
   reviewer:
-    api-key: xxx
+    api-key: sk-XX
     base-url: https://api.siliconflow.cn/
-    model: MiniMaxAI/MiniMax-M1-80k
+    model: Qwen/Qwen3-32B
   format:
-    api-key: xxx
+    api-key: sk-XX
     base-url: https://api.siliconflow.cn/
     model: deepseek-ai/DeepSeek-V3
 logging:
   level:
+    # 打印MyBatis-Plus的SQL日志
+    com.baomidou.mybatisplus.core: DEBUG
+    # 打印你的Mapper接口所在包的日志
+    com.fingertip.caseaibackend.mapper: DEBUG
     root: INFO
     org.springframework.ai: DEBUG  # 启用 Spring AI 的详细日志
     # 其他包级别的日志配置
     com.example.demo: DEBUG
+
+agileTc:
+  url: https://agile.leoao-inc.com
+
+thirdPart:
+  type: default,agileTc
+
