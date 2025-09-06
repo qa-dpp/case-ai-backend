@@ -149,7 +149,7 @@
                 <version>${spring-boot.version}</version>
                 <configuration>
                     <mainClass>com.fingertip.caseaibackend.CaseAiBackendApplication</mainClass>
-                    <skip>true</skip>
+                    <skip>false</skip>
                 </configuration>
                 <executions>
                     <execution>
