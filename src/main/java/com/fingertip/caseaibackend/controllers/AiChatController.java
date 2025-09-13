@@ -162,12 +162,39 @@ public class AiChatController {
                     // 处理docx文件
                     byte[] pdfBytes = null;
                     if (fileName.endsWith(".docx")) {
-                        XWPFDocument docxDoc = new XWPFDocument(file.getInputStream());
-                        ByteArrayOutputStream pdfOutputStream = new ByteArrayOutputStream();
-                        // 使用POI将docx转换为PDF
-                        PdfOptions options = PdfOptions.create();
-                        PdfConverter.getInstance().convert(docxDoc, pdfOutputStream, options);
-                        pdfBytes = pdfOutputStream.toByteArray();
+                        try {
+                            // 直接提取Word文档的文本内容，而不是转换为PDF
+                            XWPFDocument docxDoc = new XWPFDocument(file.getInputStream());
+                            StringBuilder docxContent = new StringBuilder();
+                            
+                            // 提取段落文本
+                            docxDoc.getParagraphs().forEach(paragraph -> {
+                                docxContent.append(paragraph.getText()).append("\n");
+                            });
+                            
+                            // 提取表格文本
+                            docxDoc.getTables().forEach(table -> {
+                                table.getRows().forEach(row -> {
+                                    row.getTableCells().forEach(cell -> {
+                                        cell.getParagraphs().forEach(paragraph -> {
+                                            docxContent.append(paragraph.getText()).append(" ");
+                                        });
+                                    });
+                                    docxContent.append("\n");
+                                });
+                                docxContent.append("\n");
+                            });
+                            
+                            // 将提取的文本内容添加到总内容中
+                            contentBuilder.append(docxContent.toString()).append("\n");
+                            
+                            // 继续处理下一个文件
+                            continue;
+                        } catch (Exception e) {
+                            result.setMessage("Word文档处理失败: " + e.getMessage());
+                            result.setCode(500);
+                            return result;
+                        }
                     }
                     // 处理pdf文件
                     else if (fileName.endsWith(".pdf")) {
@@ -292,14 +319,25 @@ public class AiChatController {
             }
             String content = contentBuilder.toString();
 
-            String resp = openAiAnalyzeChatClient
-                    .prompt(buildStructuredReviewPrompt(content))
-                    .call()
-                    .content();
+            try {
+                String resp = openAiAnalyzeChatClient
+                        .prompt(buildStructuredReviewPrompt(content))
+                        .call()
+                        .content();
 
-            result.setData(resp);
-            result.setMessage("解析完成");
-            result.setCode(200);
+                result.setData(resp);
+                result.setMessage("解析完成");
+                result.setCode(200);
+            } catch (org.springframework.ai.retry.NonTransientAiException e) {
+                // 处理API访问被拒绝的情况
+                if (e.getMessage().contains("AccessDenied") || e.getMessage().contains("403")) {
+                    result.setData(content); // 返回原始内容，不进行AI分析
+                    result.setMessage("AI服务暂时不可用，已返回原始文档内容");
+                    result.setCode(200); // 仍然返回成功状态码，但带有提示信息
+                } else {
+                    throw e; // 其他类型的错误继续抛出
+                }
+            }
 
         } catch (Exception e) {
             result.setMessage("文件处理异常: " + e.getMessage());
