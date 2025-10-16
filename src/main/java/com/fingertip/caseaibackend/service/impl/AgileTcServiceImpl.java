@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 @Service
 public class AgileTcServiceImpl implements ThirdPartCaseService {
 
+
     @Value("${agileTc.url}")
     private String agileTcUrl = "";
 
@@ -102,8 +103,6 @@ public class AgileTcServiceImpl implements ThirdPartCaseService {
     }
 
 
-
-
     private MindMap convertMarkdownToKityMinder(String markdown) {
         // 解析Markdown为节点列表
         List<MarkdownNode> nodes = parseMarkdownLines(markdown);
@@ -118,99 +117,123 @@ public class AgileTcServiceImpl implements ThirdPartCaseService {
 
     private List<MarkdownNode> parseMarkdownLines(String markdown) {
         List<MarkdownNode> nodes = new ArrayList<>();
-        String[] lines = markdown.split("\\r?\\n");
+    String[] lines = markdown.split("\\r?\\n");
 
-        int currentDepth = 0; // 当前层级深度
-        int lastIndent = -1;  // 上一个列表项的缩进量
-        int lastDepth = 0;    // 上一个节点的深度
-        boolean lastWasHeading = false;
+    int currentDepth = 0; // 当前层级深度
+    int lastIndent = -1;  // 上一个列表项的缩进量
+    int lastDepth = 0;    // 上一个节点的深度
+    boolean lastWasHeading = false;
+    Map<Integer, Integer> indentToDepthMap = new HashMap<>(); // 存储缩进量到深度的映射
 
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
+    for (String line : lines) {
+        if (line.trim().isEmpty()) continue;
 
-            // 解析标题
-            Matcher headingMatcher = Pattern.compile("^(#+)\\s+(.+)$").matcher(line);
-            if (headingMatcher.find()) {
-                int level = headingMatcher.group(1).length();
-                String text = headingMatcher.group(2).trim();
+        // 解析标题
+        Matcher headingMatcher = Pattern.compile("^(\\#+)\\s+(.+)$").matcher(line);
+        if (headingMatcher.find()) {
+            int level = headingMatcher.group(1).length();
+            String text = headingMatcher.group(2).trim();
 
-                // 标题的深度就是其级别
-                currentDepth = level;
-                nodes.add(new MarkdownNode(currentDepth, text, false));
+            // 标题的深度就是其级别
+            currentDepth = level;
+            nodes.add(new MarkdownNode(currentDepth, text, false));
 
-                lastDepth = currentDepth;
-                lastWasHeading = true;
-                lastIndent = -1;
-                continue;
-            }
+            lastDepth = currentDepth;
+            lastWasHeading = true;
+            lastIndent = -1;
+            indentToDepthMap.clear(); // 清空映射表
+            continue;
+        }
 
-            // 解析列表项
-            Matcher listMatcher = Pattern.compile("^(\\s*)[-*+]\\s+(.+)$").matcher(line);
-            if (listMatcher.find()) {
-                int indent = listMatcher.group(1).length();
-                String text = listMatcher.group(2).trim();
+        // 解析列表项
+        Matcher listMatcher = Pattern.compile("^(\\s*)[-*+]\\s+(.+)$").matcher(line);
+        if (listMatcher.find()) {
+            int indent = listMatcher.group(1).length();
+            String text = listMatcher.group(2).trim();
 
-                // 计算当前列表项的深度
-                if (lastWasHeading) {
-                    // 标题后的第一个列表项，深度+1
+            // 计算当前列表项的深度
+            if (lastWasHeading) {
+                // 标题后的第一个列表项，深度+1
+                currentDepth = lastDepth + 1;
+                indentToDepthMap.put(indent, currentDepth);
+            } else if (lastIndent >= 0) {
+                // 连续列表项，根据缩进变化计算深度
+                if (indent > lastIndent) {
+                    // 缩进增加，深度+1
                     currentDepth = lastDepth + 1;
-                } else if (lastIndent >= 0) {
-                    // 连续列表项，根据缩进变化计算深度
-                    if (indent > lastIndent) {
-                        // 缩进增加，深度+1
-                        currentDepth = lastDepth + 1;
-                    } else if (indent < lastIndent) {
-                        // 缩进减少，计算深度减少值
-                        int indentDiff = lastIndent - indent;
-                        int depthDiff = (indentDiff + 1) / 2; // 每2个空格为一级
-                        currentDepth = Math.max(lastDepth - depthDiff, 1);
+                    indentToDepthMap.put(indent, currentDepth);
+                } else if (indent < lastIndent) {
+                    // 缩进减少，查找对应的深度
+                    // 找到最大的小于当前缩进的已存在缩进
+                    Integer closestSmallerIndent = indentToDepthMap.keySet().stream()
+                            .filter(i -> i < indent)
+                            .max(Integer::compare)
+                            .orElse(null);
+                    
+                    if (closestSmallerIndent != null) {
+                        // 如果找到，当前深度为该缩进对应的深度 + 1
+                        currentDepth = indentToDepthMap.get(closestSmallerIndent) + 1;
+                        indentToDepthMap.put(indent, currentDepth);
                     } else {
-                        // 缩进不变，深度不变
-                        currentDepth = lastDepth;
+                        // 如果没找到，使用默认深度1
+                        currentDepth = 1;
+                        indentToDepthMap.put(indent, currentDepth);
                     }
                 } else {
-                    // 文档开头的列表项
-                    currentDepth = 1;
+                    // 缩进不变，深度不变
+                    currentDepth = lastDepth;
                 }
-
-                nodes.add(new MarkdownNode(currentDepth, text, true));
-
-                lastDepth = currentDepth;
-                lastWasHeading = false;
-                lastIndent = indent;
-                continue;
+            } else {
+                // 文档开头的列表项
+                currentDepth = 1;
+                indentToDepthMap.put(indent, currentDepth);
             }
 
-            // 处理普通文本行（附加到上一个节点）
-            if (!nodes.isEmpty()) {
-                MarkdownNode lastNode = nodes.get(nodes.size() - 1);
-                lastNode.setText(lastNode.getText() + "\n" + line.trim());
-            }
+            nodes.add(new MarkdownNode(currentDepth, text, true));
+
+            lastDepth = currentDepth;
+            lastWasHeading = false;
+            lastIndent = indent;
+            continue;
         }
 
-        return nodes;
+        // 处理普通文本行（附加到上一个节点）
+        if (!nodes.isEmpty()) {
+            MarkdownNode lastNode = nodes.get(nodes.size() - 1);
+            lastNode.setText(lastNode.getText() + "\n" + line.trim());
+        }
     }
 
-    private MarkdownNode buildNodeTree(List<MarkdownNode> nodes) {
-        // 创建虚拟根节点（深度0）
-        MarkdownNode root = new MarkdownNode(0, "", false);
-        Stack<MarkdownNode> stack = new Stack<>();
-        stack.push(root);
+    return nodes;
+    }
 
-        for (MarkdownNode node : nodes) {
-            // 弹出层级大于等于当前节点的所有节点
-            while (stack.size() > 1 && stack.peek().getDepth() >= node.getDepth()) {
-                stack.pop();
-            }
 
-            // 当前节点添加到栈顶节点的子节点
-            MarkdownNode parent = stack.peek();
-            parent.getChildren().add(node);
-            stack.push(node);
+    // 增强buildNodeTree方法的健壮性
+private MarkdownNode buildNodeTree(List<MarkdownNode> nodes) {
+    // 创建虚拟根节点（深度0）
+    MarkdownNode root = new MarkdownNode(0, "", false);
+    Stack<MarkdownNode> stack = new Stack<>();
+    stack.push(root);
+
+    for (MarkdownNode node : nodes) {
+        // 确保节点深度至少为1
+        if (node.getDepth() < 1) {
+            node.setDepth(1);
+        }
+        
+        // 弹出层级大于等于当前节点的所有节点
+        while (stack.size() > 1 && stack.peek().getDepth() >= node.getDepth()) {
+            stack.pop();
         }
 
-        return root;
+        // 当前节点添加到栈顶节点的子节点
+        MarkdownNode parent = stack.peek();
+        parent.getChildren().add(node);
+        stack.push(node);
     }
+
+    return root;
+}
 
     private MindMap convertToMindMap(MarkdownNode root) {
         MindMap mindMap = new MindMap();
